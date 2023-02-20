@@ -1,12 +1,12 @@
 # imap_fetcher
 
-This Python script connects to a Gmail IMAP server and retrieves email data, including the sender, date, and size. It then processes this data to calculate the total number of emails and size sent by each sender and saves it as a CSV file.
+This Python script connects to a Gmail IMAP server and retrieves the sender and size data for all emails. It then processes this data to calculate the total number of emails and size sent by each sender and saves it as a CSV file. This could be used to identify senders to blacklist or to recover some Google storage space by deleting emails (the script is read only and does not delete anything). It should work with other IMAP servers (although not tested).
 
 **Requirements**
 
 * Python 3.x
 * imaplib and email modules
-* A Gmail account and an application-specific password
+* A Gmail account and an application-specific password (see https://myaccount.google.com/security and create an App password if you do not have one)
 
 
 **How to Use**
