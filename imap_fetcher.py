@@ -14,7 +14,7 @@ imap = imaplib.IMAP4_SSL("imap.gmail.com")
 imap.login(email_address, password)
 imap.select("inbox")
 
-# Search for up to 1000 emails and retrieve their IDs, sender, date and size
+# Search for all emails and retrieve their IDs, sender, date and size
 status, email_ids = imap.search(None, "ALL")
 email_ids = email_ids[0].split()
 
@@ -29,7 +29,7 @@ bar_width = 40
 remaining_time = None
 start_time = time.time()
 
-# Fetch the email data for each ID and extract the sender, date, and size
+# Fetch the email data for each ID and extract the sender, and size
 for i, email_id in enumerate(email_ids):
     status, msg = imap.fetch(email_id, "(RFC822)")
     msg = email.message_from_bytes(msg[0][1])
