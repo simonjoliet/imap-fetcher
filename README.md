@@ -1,4 +1,4 @@
-# imap_fetcher
+# imap-fetcher
 
 A Python script to retrieve the sender and size data for all IMAP emails. It then processes this data to calculate the total number of emails and size sent by each sender and saves it into a CSV file. This could be used to identify senders to blacklist or to recover some Google storage space by deleting emails (the script is read only and does not delete anything). designed initially for Gmail, it should work with other IMAP servers (although not tested).
 
