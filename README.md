@@ -6,7 +6,7 @@ A Python script to retrieve the sender and size data for all IMAP emails. It the
 
 * Python 3.x
 * imaplib and email modules
-* A Gmail account and an application-specific password (see https://myaccount.google.com/security and create an App password if you do not have one)
+* A Gmail account and an application-specific password (see https://myaccount.google.com/apppasswords and create an App password if you do not have one)
 
 
 **How to Use**
