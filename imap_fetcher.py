@@ -5,9 +5,6 @@ import io
 import sys
 import time
 
-def decode_subject(encoded_subject):
-    return ' '.join([part.decode(encoding) if encoding else part for part, encoding in email.header.decode_header(encoded_subject)])
-
 # Set the login credentials
 email_address = "your_email@gmail.com"
 password = "Google one time password"
@@ -17,7 +14,7 @@ imap = imaplib.IMAP4_SSL("imap.gmail.com")
 imap.login(email_address, password)
 imap.select("inbox")
 
-# Search for all emails and retrieve their IDs, sender, date and size
+# Search all emails and retrieve their IDs, sender, date and size
 status, email_ids = imap.search(None, "ALL")
 email_ids = email_ids[0].split()
 
@@ -32,10 +29,13 @@ bar_width = 40
 remaining_time = None
 start_time = time.time()
 
-# Fetch the email data for each ID and extract the sender, and size
+# Fetch the email data for each ID and extract the sender, date, and size
 for i, email_id in enumerate(email_ids):
+#for i in range(0, 200):
+    #email_id = email_ids[i]
     status, msg = imap.fetch(email_id, "(RFC822)")
     msg = email.message_from_bytes(msg[0][1])
+
     sender = str(msg["From"])
     size = len(msg.as_bytes())
 
@@ -51,6 +51,7 @@ for i, email_id in enumerate(email_ids):
     # Update the progress bar and remaining time
     progress = (i + 1) / num_emails
     filled = int(bar_width * progress)
+    #bar = "[" + "\u2501" * filled + " " * (bar_width - filled) + "]"
     bar = "" + "█" * filled + "░" * (bar_width - filled) + ""
     elapsed_time = time.time() - start_time
     if elapsed_time > 0:
@@ -77,19 +78,22 @@ writer.writerow(["Sender", "Email Count", "Total Size (MB)"])
 for sender, data in senders:
     email_count = data["count"]
     total_size_mb = round(data["size"] / (1024 * 1024), 2)
-
-    #Decode sender
+    
+    #decode sender
     parts = sender.split(' ')
     if len(parts) > 1 and parts[0].startswith("=?") and parts[0].endswith("?="):
         encoded_subject = ' '.join(parts[:-1])
-        decoded_subject = decode_subject(encoded_subject)
-        email_address = parts[-1]
-        sender = f"{decoded_subject} {email_address}"
-    
+        try:
+            decoded_subject = ' '.join([part.decode(encoding) if encoding else part for part, encoding in email.header.decode_header(encoded_subject)])
+            email_address = parts[-1]
+            sender = f"{decoded_subject} {email_address}"
+        except:
+            pass
+
     writer.writerow([sender, email_count, total_size_mb])
 
 # Save the CSV file to disk
 with open("senders.csv", "w", newline="") as file:
     file.write(csv_file.getvalue())
-    
+
 print()
