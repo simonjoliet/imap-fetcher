@@ -1,99 +1,117 @@
+#!/usr/bin/env python3
+
 import imaplib
-import email
+import email, email.header
 import csv
-import io
 import sys
 import time
+import sqlite3
 
 # Set the login credentials
-email_address = "your_email@gmail.com"
-password = "Google one time password"
+EMAIL_ADDRESS = "john.doe@gmail.com"
+PASSWORD = "Google one time password"
+IMAP_SERVER = "imap.gmail.com"
+DB_FILE = 'email_data.db'
+CSV_FILE = "senders.csv"
+BAR_WIDTH = 40
 
-# Connect to the Gmail IMAP server
-imap = imaplib.IMAP4_SSL("imap.gmail.com")
-imap.login(email_address, password)
-imap.select("inbox")
+def connect_imap(server, email, password):
+    imap = imaplib.IMAP4_SSL(server)
+    imap.login(email, password)
+    imap.select("inbox")
+    return imap
 
-# Search all emails and retrieve their IDs, sender, date and size
-status, email_ids = imap.search(None, "ALL")
-email_ids = email_ids[0].split()
+def init_db(db_file):
+    conn = sqlite3.connect(db_file)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS emails
+                 (uid TEXT PRIMARY KEY, sender TEXT, size INTEGER)''')
+    conn.commit()
+    return conn, c
 
-senders = {}
-total_size = 0
-
-# Set up the progress bar
-num_emails = len(email_ids)
-bar_width = 40
-
-# Initialize the remaining time and start time
-remaining_time = None
-start_time = time.time()
-
-# Fetch the email data for each ID and extract the sender, date, and size
-for i, email_id in enumerate(email_ids):
-#for i in range(0, 200):
-    #email_id = email_ids[i]
-    status, msg = imap.fetch(email_id, "(RFC822)")
-    msg = email.message_from_bytes(msg[0][1])
-
+def fetch_email_data(imap, uid):
+    result, data = imap.uid('fetch', uid, '(RFC822)')
+    raw_email = data[0][1]
+    msg = email.message_from_bytes(raw_email)
     sender = str(msg["From"])
-    size = len(msg.as_bytes())
+    size = len(raw_email)
+    return sender, size
 
-    # Update the sender's email count and total email size
+def store_email_data(c, uid, sender, size):
+    c.execute('INSERT OR IGNORE INTO emails (uid, sender, size) VALUES (?, ?, ?)',
+              (uid, sender, size))
+
+def get_email_data(c, uid):
+    c.execute('SELECT sender, size FROM emails WHERE uid=?', (uid,))
+    return c.fetchone()
+
+def update_senders(senders, sender, size):
     if sender in senders:
         senders[sender]["count"] += 1
         senders[sender]["size"] += size
     else:
         senders[sender] = {"count": 1, "size": size}
-    
-    total_size += size
+    return senders
 
-    # Update the progress bar and remaining time
-    progress = (i + 1) / num_emails
-    filled = int(bar_width * progress)
-    #bar = "[" + "\u2501" * filled + " " * (bar_width - filled) + "]"
-    bar = "" + "█" * filled + "░" * (bar_width - filled) + ""
-    elapsed_time = time.time() - start_time
-    if elapsed_time > 0:
-        remaining_time = (elapsed_time / progress) - elapsed_time
-    (hours, remainder) = divmod(int(remaining_time), 3600)
-    (minutes, seconds) = divmod(remainder, 60)
-    remaining_time_str = f"{hours:02}:{minutes:02}:{seconds:02}" if remaining_time else "--:--:--"
-    print(f"\r{bar} {progress:.1%} [{i+1}/{num_emails}] {remaining_time_str} remaining", end="")
-    sys.stdout.flush()
-
-# Close the connection to the IMAP server
-imap.close()
-imap.logout()
-
-# Sort the senders by size
-senders = sorted(senders.items(), key=lambda x: x[1]["size"], reverse=True)
-
-# Write the email data to a CSV file
-csv_file = io.StringIO()
-writer = csv.writer(csv_file)
-writer.writerow(["Sender", "Email Count", "Total Size (MB)"])
-
-# Write the sender's email count and total email size to the CSV file
-for sender, data in senders:
-    email_count = data["count"]
-    total_size_mb = round(data["size"] / (1024 * 1024), 2)
-    
-    #decode sender
+def decode_sender(sender):
     parts = sender.split(' ')
     if len(parts) > 1 and parts[0].startswith("=?") and parts[0].endswith("?="):
         encoded_subject = ' '.join(parts[:-1])
-        try:
-            decoded_subject = ' '.join([part.decode(encoding) if encoding else part for part, encoding in email.header.decode_header(encoded_subject)])
-            email_address = parts[-1]
-            sender = f"{decoded_subject} {email_address}"
-        except:
-            pass
+        decoded_subject = email.header.make_header(email.header.decode_header(encoded_subject))
+        email_address = parts[-1]
+        return f"{decoded_subject} {email_address}"
+    return sender
 
-    writer.writerow([sender, email_count, total_size_mb])
+def write_to_csv(senders, csv_file):
+    with open(csv_file, "w", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(["Sender", "Email Count", "Total Size (MB)"])
+        for sender, data in sorted(senders.items(), key=lambda x: x[1]["size"], reverse=True):
+            email_count = data["count"]
+            total_size_mb = round(data["size"] / (1024 * 1024), 2)
+            sender = decode_sender(sender)
+            writer.writerow([sender, email_count, total_size_mb])
 
-# Save the CSV file to disk
-with open("senders.csv", "w", newline="") as file:
-    file.write(csv_file.getvalue())
+def print_progress_bar(iteration, total, start_time):
+    progress = (iteration + 1) / total
+    filled = int(BAR_WIDTH * progress)
+    bar = "█" * filled + "░" * (BAR_WIDTH - filled)
+    elapsed_time = time.time() - start_time
+    remaining_time = (elapsed_time / progress) - elapsed_time if elapsed_time > 0 else 0
+    remaining_time_str = f"{int(remaining_time // 3600):02}:{int((remaining_time % 3600) // 60):02}:{int(remaining_time % 60):02}"
+    print(f"\r{bar} {progress:.1%} [{iteration+1}/{total}] {remaining_time_str} remaining", end="")
+    sys.stdout.flush()
 
-print()
+def main():
+    imap = connect_imap(IMAP_SERVER, EMAIL_ADDRESS, PASSWORD)
+    conn, c = init_db(DB_FILE)
+
+    status, email_data = imap.uid('search', None, 'ALL')
+    email_uids = email_data[0].split()
+    num_emails = len(email_uids)
+    senders = {}
+    total_size = 0
+    start_time = time.time()
+
+    for i, email_uid in enumerate(email_uids):
+        row = get_email_data(c, email_uid)
+        if row:
+            sender, size = row
+        else:
+            sender, size = fetch_email_data(imap, email_uid)
+            store_email_data(c, email_uid, sender, size)
+            conn.commit()
+
+        senders = update_senders(senders, sender, size)
+        total_size += size
+        print_progress_bar(i, num_emails, start_time)
+
+    imap.close()
+    imap.logout()
+    conn.close()
+
+    write_to_csv(senders, CSV_FILE)
+    print()
+
+if __name__ == "__main__":
+    main()
